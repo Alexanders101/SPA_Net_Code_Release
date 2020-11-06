@@ -1,4 +1,4 @@
-# SPA_Net_Code_Release
+# SPA-Net
 Code release for "Permutationless Many-Jet Event Reconstruction with Symmetry Preserving Attention Networks" available at https://arxiv.org/abs/2010.09206
 
 # Requirements
