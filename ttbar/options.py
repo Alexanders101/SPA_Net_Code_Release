@@ -79,12 +79,13 @@ class Options(Namespace):
         # Current options are None, 'min', and 'sum
         # If None, then we will only use the proper target ordering
 
-        self.combine_pair_loss = None
+        # self.combine_pair_loss = None
         self.combine_pair_loss = 'min'
         # self.combine_pair_loss = 'sum'
 
         # The optimizer to use for trianing the network
         # This must be a valid class in torch.optim or nvidia apex with 'apex' prefix
+        # See ttbar.network.quark_base_network.py -> configure_optimizers() for more information.
         self.optimizer = "apex_lamb"
 
         # Optimizer learning rate
@@ -103,6 +104,7 @@ class Options(Namespace):
         self.num_gpu = 4
 
         # Number of processes to spawn for data collection
+        # This is per-gpu! So if we use 4 gpus, then 64 workers will be spawned.
         self.num_dataloader_workers = 16
 
         # List of usable gpus

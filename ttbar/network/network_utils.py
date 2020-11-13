@@ -5,28 +5,6 @@ from ttbar.options import Options
 
 
 @torch.jit.script
-def safe_exp(x: torch.Tensor, eps: torch.Tensor = torch.tensor(1e-6)):
-    """ Numerically safe exponential map used for softmax.
-
-    Options
-    ----------
-    x: Tensor to apply exp map to
-    eps: Minimum offset to prevent underflow
-
-    Returns
-    -------
-    The new tensor
-    """
-
-    max_offset = x.max(1, keepdim=True).values
-    max_offset = max_offset.max(2, keepdim=True).values
-
-    output = torch.exp(x - max_offset)
-    output = output + eps
-    return output
-
-
-@torch.jit.script
 def masked_softmax(x: torch.Tensor,
                    mask: torch.Tensor,
                    dim: int = 1,

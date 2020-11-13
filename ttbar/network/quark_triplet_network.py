@@ -41,10 +41,12 @@ class QuarkTripletNetwork(QuarkBaseNetwork):
 
     @staticmethod
     def negative_log_likelihood(prediction, target, eps=1e-6):
+        """ Loss term for triplet prediction. """
         return -torch.sum(torch.log(prediction + eps) * target, dim=(1, 2, 3))
 
     @staticmethod
     def symmetric_cross_entropy(x, y, eps=1e-6):
+        """ Loss term for seperating the two output heads. """
         H_xy = x * torch.log(y + eps)
         H_yx = y * torch.log(x + eps)
 
@@ -67,6 +69,7 @@ class QuarkTripletNetwork(QuarkBaseNetwork):
 
     @staticmethod
     def swap_antiparticle_targets(targets: TargetType) -> TargetType:
+        """ Charge symmetry for the targets. """
         return targets[1], targets[0]
 
     def training_step(self, batch, batch_nb):
@@ -95,6 +98,7 @@ class QuarkTripletNetwork(QuarkBaseNetwork):
 
     @staticmethod
     def accuracy(predictions: PredictType, targets: TargetType) -> Tuple[Tensor, Tensor]:
+        """ Compute single top and eventy accuracy for a batch. """
         left_predictions = predictions[0].clone()
         right_predictions = predictions[1].clone()
 

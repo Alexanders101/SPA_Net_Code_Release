@@ -1,4 +1,4 @@
-from typing import Optional, Union, Tuple, List, Callable
+from typing import Optional, Union, Tuple
 from collections import OrderedDict
 from pathlib import Path
 
@@ -24,8 +24,7 @@ class TTBarDataset(Dataset):
                  max_jets: Optional[int] = None,
                  event_mask: Optional[int] = 2,
                  valid_subset: bool = False,
-                 use_cache: bool = True,
-                 sparse_format: bool = False):
+                 use_cache: bool = True):
         """ Create a dataset describing particle collision jets.
 
         Options
@@ -38,6 +37,8 @@ class TTBarDataset(Dataset):
             The maximum number of jets that can be present during an event.
         event_mask: int, optional
             Limit the events to those which have the given number of top quarks.
+        valid_subset: bool, default False
+            Whether or not to limit the dataset to the valid parton jets.
         use_cache: bool
             If true, then this class will create and read from any present cache file for a given hdf5 file.
         """
@@ -45,8 +46,7 @@ class TTBarDataset(Dataset):
         jet_suffix = f'{max_jets}_jets.' if max_jets is not None else 'all_jets.'
         mask_suffix = f'{event_mask}_top.' if event_mask is not None else ''
         valid_suffix = 'valid.' if valid_subset else ''
-        sparse_suffix = 'sparse.' if sparse_format else ''
-        cache_file = Path(f"{hdf5_path}.{jet_suffix}{mask_suffix}{valid_suffix}{sparse_suffix}{self.suffix}cache")
+        cache_file = Path(f"{hdf5_path}.{jet_suffix}{mask_suffix}{valid_suffix}{self.suffix}cache")
 
         if use_cache and cache_file.exists():
             extra_message = 'Simplified to 6 valid jets.' if valid_subset else ''
@@ -54,7 +54,7 @@ class TTBarDataset(Dataset):
             self._load_from_cache(cache_file)
 
         else:
-            self._load_data(hdf5_path, max_jets, event_mask, valid_subset, sparse_format)
+            self._load_data(hdf5_path, max_jets, event_mask, valid_subset)
             self._save_to_cache(cache_file)
 
         if valid_subset:
@@ -68,20 +68,12 @@ class TTBarDataset(Dataset):
         indices = np.arange(self.num_samples)[index[0]:index[1]]
         self.num_samples = indices.shape[0]
 
-        print(index)
-
         # Create data objects
         self.mask = self.mask[indices]
         self.source = self.source[indices]
         self.indices = indices
 
-        if sparse_format:
-            self.targets = OrderedDict({key: self.contiguous_subset_sparse(val, indices)
-                                        for key, val in self.targets.items()})
-        else:
-            self.targets = OrderedDict({key: val[indices] for key, val in self.targets.items()})
-
-        self.sparse_format = sparse_format
+        self.targets = OrderedDict({key: val[indices] for key, val in self.targets.items()})
 
         # Create transformation objects
         self.mean: Optional[torch.Tensor] = None
@@ -89,6 +81,7 @@ class TTBarDataset(Dataset):
 
     @property
     def suffix(self):
+        """ Extra suffix that any subclasses add to the cache file. """
         return ""
 
     # =============================================================================================
@@ -98,8 +91,7 @@ class TTBarDataset(Dataset):
                    hdf5_path: str,
                    max_jets: Optional[int],
                    event_mask: Optional[int],
-                   valid_subset: bool,
-                   sparse_format: bool):
+                   valid_subset: bool):
 
         with H5File(hdf5_path, 'r') as file:
             # Take only the event with the specified number of top quarks if specified
@@ -139,11 +131,9 @@ class TTBarDataset(Dataset):
             self.partons = torch.zeros((num_samples, 6, len(parton_indices)), dtype=torch.float32)
 
             # Output target storage
-            targets = OrderedDict({
-                "qq": torch.zeros((num_samples, max_jets, max_jets), dtype=torch.uint8),
-                "b": torch.zeros((num_samples, max_jets, 1), dtype=torch.uint8),
-                "qq_bar": torch.zeros((num_samples, max_jets, max_jets), dtype=torch.uint8),
-                "b_bar": torch.zeros((num_samples, max_jets, 1), dtype=torch.uint8)
+            self.targets = OrderedDict({
+                "t": torch.zeros((num_samples, 3), dtype=torch.int) - 1,
+                "t_bar": torch.zeros((num_samples, 3), dtype=torch.int) - 1,
             })
 
             target_barcodes = {
@@ -183,32 +173,17 @@ class TTBarDataset(Dataset):
 
                 # Load in the target data
                 # We first load in the different particles into their own matrices
-                for _, target, barcode in dict_zip(targets, target_barcodes):
+                for target_name, barcode in target_barcodes.items():
+                    target_name = 't_bar' if 'bar' in target_name else 't'
                     idx = np.where(barcodes == barcode)[0]
                     try:
                         if barcode in {target_barcodes['qq'], target_barcodes['qq_bar']} and idx.shape[0] == 2:
-                            a, b = idx
-                            target[i, a, b] = 1
-                            target[i, b, a] = 1
+                            self.targets[target_name][i, 0] = idx[0]
+                            self.targets[target_name][i, 1] = idx[1]
                         if barcode in {target_barcodes['b'], target_barcodes['b_bar']}:
-                            target[i, idx[0]] = 1
+                            self.targets[target_name][i, 2] = idx[0]
                     except IndexError:
                         pass
-
-            # TODO: This is current really inefficient because we construct the dense data first and then sparsify.
-
-            # Combine the individual jet labels into the triplet targets
-            self.targets = OrderedDict({
-                't': targets['qq'].view(-1, max_jets, max_jets, 1) * targets['b'].view(-1, 1, 1, max_jets),
-                't_bar': targets['qq_bar'].view(-1, max_jets, max_jets, 1) * targets['b_bar'].view(-1, 1, 1, max_jets)
-            })
-
-            # Convert to a sparse format for faster loading
-            if sparse_format:
-                self.targets = OrderedDict({
-                    't': self.targets['t'].to_sparse(),
-                    't_bar': self.targets['t_bar'].to_sparse(),
-                })
 
     def _load_from_cache(self, cache_file):
         cache = torch.load(cache_file)
@@ -279,14 +254,20 @@ class TTBarDataset(Dataset):
         x = self.source[index].clone()
         mask = self.mask[index]
 
-        if self.sparse_format:
-            y = tuple(target[index].to_dense() for target in self.targets.values())
-        else:
-            y = tuple(target[index] for target in self.targets.values())
+        # Convert sparse targets into a dense matrix representation.
+        y = tuple(target[index] for target in self.targets.values())
+        cube_targets = []
+        for (q1, q2, b) in y:
+            cube_target = torch.zeros(self.max_jets, self.max_jets, self.max_jets)
+            cube_target[q1, q2, b] = 1
+            cube_target[q2, q1, b] = 1
+
+            cube_targets.append(cube_target)
 
         # Normalize the input features in real-time
+        # This is to avoid changing to original dataset.
         if self.mean is not None:
             x[mask] -= self.mean
             x[mask] /= self.std
 
-        return x, y, mask
+        return x, cube_targets, mask
