@@ -214,25 +214,6 @@ class TTBarDataset(Dataset):
         for key, value in self.targets.items():
             self.targets[key] = value[:, :self.max_jets, :self.max_jets].contiguous()
 
-    @staticmethod
-    def contiguous_subset_sparse(tensor, subset_index):
-        tensor = tensor.coalesce()
-
-        shape = tensor.shape
-        indices = tensor.indices().clone()
-        values = tensor.values()
-
-        max_index, min_index = subset_index.max(), subset_index.min()
-
-        subset_index = (indices[0] <= max_index) & (indices[0] >= min_index)
-        indices[0] -= min_index
-
-        shape = (max_index - min_index + 1, *shape[1:])
-        indices = indices.T[subset_index].T
-        values = values[subset_index]
-
-        return torch.sparse_coo_tensor(indices, values, size=shape)
-
     # =============================================================================================
     # Dataset Methods
     # =============================================================================================
