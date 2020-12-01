@@ -30,7 +30,7 @@ def main(input_file: str, checkpoint: Optional[str], epochs: Optional[int], fp16
 if __name__ == '__main__':
     parser = ArgumentParser()
 
-    parser.add_argument("-i", "--input_file", type=str, default="./data/event_records_training.h5",
+    parser.add_argument("-i", "--input_file", type=str, default="./data/event_records_training_example.h5",
                         help="Input file containing training data.")
 
     parser.add_argument("-c", "--checkpoint", type=str, default=None,
