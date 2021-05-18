@@ -1,7 +1,7 @@
 # SPA-Net
 
 # This repository is now deprecated in favor of the general SPANet library
-http://mlphysics.ics.uci.edu/data/2021_ttbar/
+https://github.com/Alexanders101/SPANet
 
 *Permutationless Many-Jet Event Reconstruction with Symmetry Preserving Attention Networks*. \
 https://arxiv.org/abs/2010.09206
